@@ -192,11 +192,30 @@ export const RegionMappingTable = () => {
       }
       if (debouncedFilters.pincode) {
         console.log("Applying pincode filter:", debouncedFilters.pincode);
-        query = query.ilike('"Pincode"', `%${debouncedFilters.pincode}%`);
+        // For int8 pincode, check if it's a complete pincode or partial
+        const pincodeNumber = parseInt(debouncedFilters.pincode);
+        if (!isNaN(pincodeNumber)) {
+          if (debouncedFilters.pincode.length === 6) {
+            // Exact match for complete pincode
+            query = query.eq('Pincode', pincodeNumber);
+          } else {
+            // For partial pincode, use starts-with logic through range filtering
+            const multiplier = Math.pow(10, 6 - debouncedFilters.pincode.length);
+            const startRange = pincodeNumber * multiplier;
+            const endRange = startRange + multiplier - 1;
+            query = query.gte('Pincode', startRange).lte('Pincode', endRange);
+          }
+        }
       }
       if (debouncedFilters.tier) {
         console.log("Applying tier filter:", debouncedFilters.tier);
-        query = query.ilike('"Tier"', `%${debouncedFilters.tier}%`);
+        if (debouncedFilters.tier === "null") {
+          // Filter for null/empty tier values
+          query = query.is('Tier', null);
+        } else {
+          // Use exact match for tier filtering since it's a dropdown selection
+          query = query.eq('Tier', debouncedFilters.tier);
+        }
       }
       if (debouncedFilters.globalSearch) {
         console.log("Applying global search filter:", debouncedFilters.globalSearch);
@@ -225,10 +244,29 @@ export const RegionMappingTable = () => {
         dataQuery = dataQuery.ilike('"District Name"', `%${debouncedFilters.districtName}%`);
       }
       if (debouncedFilters.pincode) {
-        dataQuery = dataQuery.ilike('"Pincode"', `%${debouncedFilters.pincode}%`);
+        // For int8 pincode, check if it's a complete pincode or partial
+        const pincodeNumber = parseInt(debouncedFilters.pincode);
+        if (!isNaN(pincodeNumber)) {
+          if (debouncedFilters.pincode.length === 6) {
+            // Exact match for complete pincode
+            dataQuery = dataQuery.eq('Pincode', pincodeNumber);
+          } else {
+            // For partial pincode, use starts-with logic through range filtering
+            const multiplier = Math.pow(10, 6 - debouncedFilters.pincode.length);
+            const startRange = pincodeNumber * multiplier;
+            const endRange = startRange + multiplier - 1;
+            dataQuery = dataQuery.gte('Pincode', startRange).lte('Pincode', endRange);
+          }
+        }
       }
       if (debouncedFilters.tier) {
-        dataQuery = dataQuery.ilike('"Tier"', `%${debouncedFilters.tier}%`);
+        if (debouncedFilters.tier === "null") {
+          // Filter for null/empty tier values
+          dataQuery = dataQuery.is('Tier', null);
+        } else {
+          // Use exact match for tier filtering since it's a dropdown selection
+          dataQuery = dataQuery.eq('Tier', debouncedFilters.tier);
+        }
       }
       if (debouncedFilters.globalSearch) {
         dataQuery = dataQuery.or(`"State Name".ilike.%${debouncedFilters.globalSearch}%,"District Name".ilike.%${debouncedFilters.globalSearch}%,"SubDistrict Name".ilike.%${debouncedFilters.globalSearch}%,"Village Name".ilike.%${debouncedFilters.globalSearch}%`);
@@ -450,8 +488,12 @@ export const RegionMappingTable = () => {
               <Input
                 placeholder="Enter pincode (min 3 digits)..."
                 value={filters.pincode}
-                onChange={(e) => handleFilterChange("pincode", e.target.value)}
-                type="number"
+                onChange={(e) => {
+                  // Only allow numeric input for pincode
+                  const value = e.target.value.replace(/\D/g, '');
+                  handleFilterChange("pincode", value);
+                }}
+                inputMode="numeric"
               />
               {filters.pincode.length > 0 && filters.pincode.length < 3 && (
                 <p className="text-xs text-amber-600 mt-1">Type at least 3 digits to search</p>
@@ -461,7 +503,18 @@ export const RegionMappingTable = () => {
             {/* Tier Filter */}
             <div>
               <label className="block text-sm font-medium mb-1">Tier</label>
-              <Select value={filters.tier === "" ? "all" : filters.tier} onValueChange={(value) => handleFilterChange("tier", value === "all" ? "" : value)}>
+              <Select 
+                value={filters.tier === "" ? "all" : (filters.tier === null ? "empty" : filters.tier)} 
+                onValueChange={(value) => {
+                  if (value === "all") {
+                    handleFilterChange("tier", "");
+                  } else if (value === "empty") {
+                    handleFilterChange("tier", "null");
+                  } else {
+                    handleFilterChange("tier", value);
+                  }
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select tier..." />
                 </SelectTrigger>
@@ -471,6 +524,7 @@ export const RegionMappingTable = () => {
                   <SelectItem value="Tier 2">Tier 2</SelectItem>
                   <SelectItem value="Tier 3">Tier 3</SelectItem>
                   <SelectItem value="Tier 4">Tier 4</SelectItem>
+                  <SelectItem value="empty">No Tier (Empty)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
